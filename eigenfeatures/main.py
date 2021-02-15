@@ -2,7 +2,9 @@ import cv2
 import numpy as np
 import os
 import matplotlib.pyplot as plt
-from tqdm import tqdm
+from tqdm import tqdm, trange
+from scipy.spatial.distance import euclidean
+
 
 # import sys
 
@@ -21,13 +23,14 @@ def createDataMatrix(images):
         '''
 
     numImages = len(images)
-    sz = images[0].shape  # 218, 178, 3
+    print(f"numImages = {numImages}")
+    sz = images[0][0].shape  # 218, 178, 3
     print(f"image size shape {sz}")
     print(f"image size shape flatten size {sz[0] * sz[1] * sz[2]}")
 
     data = np.zeros((numImages, sz[0] * sz[1] * sz[2]), dtype=np.float32)
     for i in range(0, numImages):
-        image = images[i].flatten()
+        image = images[i][0].flatten()
         data[i, :] = image
 
     print("DONE in createDataMatrix")
@@ -50,7 +53,6 @@ def readImages(path):
             im = cv2.cvtColor(im, cv2.COLOR_BGR2RGB)
 
 
-
             if im is None:
                 print("image:{} not read properly".format(imagePath))
             else:
@@ -62,26 +64,24 @@ def readImages(path):
                 im = np.float32(im) / 255.0
 
 
-                # TODO: why we add two images per person?
-                # maybe to make more samples of one person?
-                # TODO: how many unique identities we have in celeba?
                 # Add image to list
-                images.append(im)
+                images.append((im, filePath))
+
                 # Flip image
+                # If one wants to increase the dataset and make it symmetric
                 # > 0 for flipping around the y-axis (horizontal flipping);
-                imFlip = cv2.flip(im, 1);
+                # imFlip = cv2.flip(im, 1);
                 # Append flipped image
-                images.append(imFlip)
-                # images.append(im)
+                # images.append((imFlip, filePath))
             # plt.imshow(imFlip)
             # plt.show()
             # exit()
 
 
-        if len(images) == 100:
+        if len(images) == 500:
             break
 
-    numImages = len(images) / 2
+    numImages = len(images)
     # Exit if no image found
     if numImages == 0:
         print("No images found")
@@ -115,13 +115,20 @@ def readImages(path):
 #         cv2.setTrackbarPos("Weight" + str(i), "Trackbars", MAX_SLIDER_VALUE/2);
 #     createNewFace()
 
+def read_labels(path):
+    with open(path, 'r', encoding='utf-8') as reader:
+        data = reader.readlines()
+    data = [sample.strip().split(" ") for sample in data]
+    data = {key: value for (key, value) in data}
+
+    return data
+
 
 def main():
-    # Number of EigenFaces
-    NUM_EIGEN_FACES = 10
+    identity_labels = read_labels("data/identity_CelebA.txt")
 
-    # Maximum weight
-    MAX_SLIDER_VALUE = 255
+    # Number of EigenFaces
+    NUM_EIGEN_FACES = 512
 
     # Directory containing images
     dirName = "data/img_align_celeba"
@@ -134,7 +141,7 @@ def main():
     images = readImages(dirName)
 
     # Size of images
-    sz = images[0].shape
+    sz = images[0][0].shape
 
     #  Each row of the data matrix is one image. Let’s look into the createDataMatrix function
     # Create data matrix for PCA.
@@ -146,6 +153,44 @@ def main():
     print("DONE")
     print(f"mean shape {mean.shape}")
     print(f"eigenVectors shape {eigenVectors.shape}")
+
+    # A = 403 # 0 - 71.15271759033203
+    # 003415 - 130.19
+    A = 0
+    weight_vector = np.matmul(eigenVectors, (images[A][0].flatten() - mean).reshape(mean.shape[1], 1))
+    im = cv2.imread("/home/administrator/Documents/UCU/Study/Linear_algebra/final_project/repo/eigenfeatures/data/img_align_celeba/004390.jpg", cv2.IMREAD_COLOR)
+    im = cv2.cvtColor(im, cv2.COLOR_BGR2RGB)
+    im = np.float32(im) / 255.0
+    # TODO: compare number of eigenfaces with accuracy
+    # TODO: compare number of fed images with accuracy
+
+    metric = euclidean(np.matmul(eigenVectors, (im.flatten() - mean).reshape(mean.shape[1], 1)),
+                       weight_vector)
+    print(metric)
+    exit()
+    for B in trange(0, 405):
+
+        # print((images[0].flatten() - mean).reshape(mean.shape[1], 1).shape)
+        # exit()
+        # print(f"face A = {identity_labels[images[A][1]]}")
+        # print(weight_vector.shape)
+
+        # print(np.matmul(eigenVectors, (images[1].flatten() - mean).reshape(mean.shape[1], 1)))
+        # exit()
+
+        # mse = ((A - B) ** 2).mean(axis=ax)
+        # linalg.norm(a - b)
+
+        # print(f"face B = {identity_labels[images[B][1]]}")
+
+        metric = euclidean(np.matmul(eigenVectors, (images[B][0].flatten() - mean).reshape(mean.shape[1], 1)), weight_vector)
+        print(metric)
+        if metric < 75:
+            print(f"face B = {identity_labels[images[B][1]]}")
+            print(f"similar to A = {A}")
+
+    exit()
+
 
     averageFace = mean.reshape(sz)
 
