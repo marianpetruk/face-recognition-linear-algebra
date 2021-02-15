@@ -4,6 +4,8 @@ import os
 import matplotlib.pyplot as plt
 from tqdm import tqdm, trange
 from scipy.spatial.distance import euclidean
+import face_recognition
+from pprint import pprint
 
 
 # import sys
@@ -38,20 +40,25 @@ def createDataMatrix(images):
 
 
 # Read images from the directory
-def readImages(path):
+def readImages(path, train_files):
     print("Reading images from " + path, end="...")
     # Create array of array of images.
     images = []
     # List all files in the directory and read points from text files one by one
-    for filePath in tqdm(sorted(os.listdir(path))):
+    # for filePath in tqdm(sorted(os.listdir(path))):
+    for filePath in tqdm(np.array(train_files)[:,0]):
         fileExt = os.path.splitext(filePath)[1]
         if fileExt in [".jpg", ".jpeg", ".png"]:
+            # print(path)
 
             # Add to array of images
             imagePath = os.path.join(path, filePath)
             im = cv2.imread(imagePath, cv2.IMREAD_COLOR)
             im = cv2.cvtColor(im, cv2.COLOR_BGR2RGB)
-
+            try:
+                im = crop_left_eye(im)
+            except:
+                continue
 
             if im is None:
                 print("image:{} not read properly".format(imagePath))
@@ -62,7 +69,6 @@ def readImages(path):
                 # TODO: why we do this?
                 # Convert image to floating point
                 im = np.float32(im) / 255.0
-
 
                 # Add image to list
                 images.append((im, filePath))
@@ -77,9 +83,8 @@ def readImages(path):
             # plt.show()
             # exit()
 
-
-        if len(images) == 500:
-            break
+        # if len(images) == 500:
+        #     break
 
     numImages = len(images)
     # Exit if no image found
@@ -124,11 +129,115 @@ def read_labels(path):
     return data
 
 
+def read_train_files(path="../sample_1k.txt"):
+    with open(path, 'r', encoding='utf-8') as reader:
+        data = reader.readlines()
+    # print(data[0])
+    # print(data[0].strip().split(',')[1:])
+    # exit()
+    data = [sample.strip().split(",")[1:] for sample in data]
+    # data = {key: value for (key, value) in data}
+
+    return data
+
+
+def vec_normalization(vectors):
+    # https://github.com/otakbeku/FERNLV/blob/43720d116985bdedbfb8e8b4591c0ca4f04f2054/FERNLV/EigenUtils.py
+    """
+    Normalize the vectors with min-max normalization
+    :param vectors: numpy array
+    :return: normalized vector
+    """
+    vectors = np.asarray(vectors)
+    max_pixel = vectors.max()
+    min_pixel = vectors.min()
+    for index in range(len(vectors)):
+        new_pixel = []
+        for indexPixel in range(len(vectors[index])):
+            value = 255 * (vectors[index, indexPixel] - min_pixel) / (max_pixel - min_pixel)
+
+            value = np.uint8(value.real)
+            new_pixel.append(value)
+        vectors[index] = new_pixel
+    return vectors
+
+def crop_left_eye(im):
+    face_landmarks_list = face_recognition.face_landmarks(im)
+
+    left_eye_top_left = face_landmarks_list[0]["left_eye"][0]
+    left_eye_bottom_right = face_landmarks_list[0]["left_eye"][3]
+
+    left_eye_crop = im[left_eye_top_left[1] - 10:left_eye_bottom_right[1] + 10,
+                    left_eye_top_left[0] - 10:left_eye_bottom_right[0] + 10]
+    left_eye_crop = cv2.resize(left_eye_crop, (32, 32), cv2.INTER_LANCZOS4)
+
+    return left_eye_crop
+
+def crop_right_eye(im):
+    face_landmarks_list = face_recognition.face_landmarks(im)
+
+    right_eye_bottom_right = face_landmarks_list[0]["right_eye"][3]
+    right_eye_top_left = face_landmarks_list[0]["right_eye"][0]
+
+    right_eye_crop = im[right_eye_top_left[1] - 10:right_eye_bottom_right[1] + 10,
+                    right_eye_top_left[0] - 10:right_eye_bottom_right[0] + 10]
+    right_eye_crop = cv2.resize(right_eye_crop, (32, 32), cv2.INTER_LANCZOS4)
+
+    return right_eye_crop
+
+
+
+def test():
+    """
+    # im = cv2.imread(
+    #     "/home/administrator/Documents/UCU/Study/Linear_algebra/final_project/repo/eigenfeatures/data/img_align_celeba/004390.jpg",
+    #     cv2.IMREAD_COLOR)
+    # im = cv2.cvtColor(im, cv2.COLOR_BGR2RGB)
+    # face_landmarks_list = face_recognition.face_landmarks(im)
+
+    left_eye_top_left = face_landmarks_list[0]["left_eye"][0]
+    left_eye_bottom_right = face_landmarks_list[0]["left_eye"][3]
+
+    # right_eye_bottom_right = face_landmarks_list[0]["right_eye"][3]
+    # right_eye_top_left = face_landmarks_list[0]["right_eye"][0]
+    #
+    # nose_left = face_landmarks_list[0]["nose_tip"][0]
+    # nose_right = face_landmarks_list[0]["nose_tip"][4]
+    #
+    # lips_left = face_landmarks_list[0]["top_lip"][0]
+    # lips_right = face_landmarks_list[0]["top_lip"][6]
+
+    # im = cv2.circle(im, face_landmarks_list[0]["top_lip"][6], radius=5, color=(0, 0, 255), thickness=-1)
+
+    left_eye_crop = im[left_eye_top_left[1] - 10:left_eye_bottom_right[1] + 10,
+                    left_eye_top_left[0] - 10:left_eye_bottom_right[0] + 10]
+    left_eye_crop = cv2.resize(left_eye_crop, (32, 32), cv2.INTER_LANCZOS4)
+    # TODO: add more crops more eigenfeatures
+    # right_eye_crop = im[right_eye_top_left[1] - 10:right_eye_bottom_right[1] + 10,
+    #                 right_eye_top_left[0] - 10:right_eye_bottom_right[0] + 10]
+    # right_eye_crop = cv2.resize(left_eye_crop, (32, 32), cv2.INTER_LANCZOS4)
+
+    plt.imshow(left_eye_crop)
+    print(left_eye_crop.shape)
+    plt.show()
+
+    # pprint(face_landmarks_list)
+
+    exit()
+    """
+    pass
+
 def main():
+
+    # face_recognizer = cv2.face_FisherFaceRecognizer.create()
+    # exit()
+    #
+
     identity_labels = read_labels("data/identity_CelebA.txt")
+    train_files = read_train_files()
 
     # Number of EigenFaces
-    NUM_EIGEN_FACES = 512
+    NUM_EIGEN_FACES = 10
 
     # Directory containing images
     dirName = "data/img_align_celeba"
@@ -138,7 +247,8 @@ def main():
     #  We also flip the images vertically and add them to the list.
     #  Because the mirror image of a valid facial image, we just doubled the size of our dataset and made it symmetric at that same time.
     # Read images
-    images = readImages(dirName)
+    images = readImages(dirName, train_files)
+    # exit()
 
     # Size of images
     sz = images[0][0].shape
@@ -158,15 +268,21 @@ def main():
     # 003415 - 130.19
     A = 0
     weight_vector = np.matmul(eigenVectors, (images[A][0].flatten() - mean).reshape(mean.shape[1], 1))
-    im = cv2.imread("/home/administrator/Documents/UCU/Study/Linear_algebra/final_project/repo/eigenfeatures/data/img_align_celeba/004390.jpg", cv2.IMREAD_COLOR)
-    im = cv2.cvtColor(im, cv2.COLOR_BGR2RGB)
-    im = np.float32(im) / 255.0
+
     # TODO: compare number of eigenfaces with accuracy
     # TODO: compare number of fed images with accuracy
 
-    metric = euclidean(np.matmul(eigenVectors, (im.flatten() - mean).reshape(mean.shape[1], 1)),
-                       weight_vector)
-    print(metric)
+    # im = cv2.imread(
+    #     "/home/administrator/Documents/UCU/Study/Linear_algebra/final_project/repo/eigenfeatures/data/img_align_celeba/004390.jpg",
+    #     cv2.IMREAD_COLOR)
+    # im = cv2.cvtColor(im, cv2.COLOR_BGR2RGB)
+    #
+    # im = crop_left_eye(im)
+    # im = np.float32(im) / 255.0
+    # metric = euclidean(np.matmul(eigenVectors, (im.flatten() - mean).reshape(mean.shape[1], 1)),
+    #                    weight_vector)
+    # print(metric)
+
     exit()
     for B in trange(0, 405):
 
@@ -183,14 +299,14 @@ def main():
 
         # print(f"face B = {identity_labels[images[B][1]]}")
 
-        metric = euclidean(np.matmul(eigenVectors, (images[B][0].flatten() - mean).reshape(mean.shape[1], 1)), weight_vector)
+        metric = euclidean(np.matmul(eigenVectors, (images[B][0].flatten() - mean).reshape(mean.shape[1], 1)),
+                           weight_vector)
         print(metric)
         if metric < 75:
             print(f"face B = {identity_labels[images[B][1]]}")
             print(f"similar to A = {A}")
 
     exit()
-
 
     averageFace = mean.reshape(sz)
 
@@ -234,14 +350,13 @@ def main():
     # cv2.waitKey(0)
     # cv2.destroyAllWindows()
 
+
 # TODO: implement and compare cv2 default eigenface https://youtu.be/myKXW6SKLzY
 
-#TODO: deeplearning
+# TODO: deeplearning
 # https://github.com/JDAI-CV/faceX-Zoo
 # https://arxiv.org/pdf/2101.04407.pdf
 # https://arxiv.org/pdf/1811.00116.pdf
-
-
 
 
 # Press the green button in the gutter to run the script.
